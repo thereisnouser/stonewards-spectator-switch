@@ -13,13 +13,19 @@ namespace StonewardsSpectatorSwitch
     {
         public const string PluginGuid = "com.thereisnouser.stonewards.spectatorswitch";
         public const string PluginName = "Stonewards Spectator Switch";
-        public const string PluginVersion = "0.1.1";
+        public const string PluginVersion = "0.1.0";
 
         private readonly List<FirstPersonController> _alivePlayers = new List<FirstPersonController>(4);
         private ConfigEntry<bool> _enabled;
         private ConfigEntry<float> _orbitDistance;
         private ConfigEntry<float> _eyeHeight;
         private ConfigEntry<bool> _autoAdvance;
+        private ConfigEntry<bool> _showButtons;
+        private SpectatorHud _hud;
+
+        private bool _cursorBorrowed;
+        private CursorLockMode _savedCursorLock;
+        private bool _savedCursorVisible;
 
         private FirstPersonController _target;
         private FirstPersonController _lastLocalPlayer;
@@ -35,8 +41,8 @@ namespace StonewardsSpectatorSwitch
                 "Allow left/right mouse clicks to cycle through living teammates while dead.");
             _autoAdvance = Config.Bind("General", "AutoAdvanceWhenTargetDies", true,
                 "Automatically select another living teammate if the current spectator target dies or leaves.");
-            // New keys deliberately replace 0.1.0's Distance/Height settings.
-            // Existing config files must start with first-person/free-look defaults.
+            // First release uses the existing game-controlled view angle by default.
+            // The old internal chase-camera offsets are intentionally retired.
             _orbitDistance = Config.Bind("Camera", "OrbitDistance", 0f,
                 new ConfigDescription("Optional pullback along your current view direction (0 = player eye position).",
                     new AcceptableValueRange<float>(0f, 8f)));
@@ -44,7 +50,11 @@ namespace StonewardsSpectatorSwitch
                 new ConfigDescription("Camera eye height relative to the selected player's transform.",
                     new AcceptableValueRange<float>(0.5f, 3f)));
 
-            Logger.LogInfo("Spectator Switch v" + PluginVersion + " initialized (client-side). LMB: next, RMB: previous while dead.");
+            _showButtons = Config.Bind("UI", "ShowButtons", true,
+                "Show clickable spectator buttons in the HUD while dead.");
+            _hud = new SpectatorHud(CycleFromButton);
+
+            Logger.LogInfo("Spectator Switch v" + PluginVersion + " initialized (client-side). LMB: next, RMB: previous; hold ALT to click spectator buttons.");
         }
 
         private void OnEnable()
@@ -92,17 +102,84 @@ namespace StonewardsSpectatorSwitch
                     Cycle(1);
             }
 
-            // Only take mouse clicks when the vanilla death input state is active.
-            // This avoids interfering with pause, inventory, class, or other modal menus.
-            if (InputManager.Instance == null ||
-                InputManager.Instance.CurrentInputState != InputManager.InputState.Dead ||
-                Mouse.current == null)
+            // Never show the spectator picker over inventory, pause or class menus.
+            bool deadInput = InputManager.Instance != null &&
+                InputManager.Instance.CurrentInputState == InputManager.InputState.Dead;
+            bool shown = false;
+            if (deadInput && _showButtons.Value && _hud != null)
+                shown = _hud.Show(_target != null ? _target.playerName : null,
+                    _alivePlayers.IndexOf(_target), _alivePlayers.Count);
+            else
+                _hud?.Hide();
+
+            // The game can lock the mouse for camera look. Holding ALT temporarily
+            // releases it so UI Toolkit buttons can receive real pointer clicks.
+            // On release, restore the game's cursor settings.
+            UpdateCursorForButtons(deadInput && shown);
+
+            if (!deadInput || Mouse.current == null)
+                return;
+
+            // A free cursor belongs to the on-screen buttons. Do not also execute
+            // the global LMB shortcut, which would turn a previous-click into next.
+            if (Cursor.visible && Cursor.lockState == CursorLockMode.None)
                 return;
 
             if (Mouse.current.leftButton.wasPressedThisFrame)
                 Cycle(1);
             else if (Mouse.current.rightButton.wasPressedThisFrame)
                 Cycle(-1);
+        }
+
+        private void CycleFromButton(int direction)
+        {
+            if (_enabled == null || !_enabled.Value || !_dead ||
+                InputManager.Instance == null ||
+                InputManager.Instance.CurrentInputState != InputManager.InputState.Dead)
+                return;
+
+            Cycle(direction);
+        }
+
+        private void UpdateCursorForButtons(bool canClick)
+        {
+            var keyboard = Keyboard.current;
+            bool altHeld = keyboard != null &&
+                (keyboard[Key.LeftAlt].isPressed || keyboard[Key.RightAlt].isPressed);
+
+            if (!canClick || !altHeld)
+            {
+                ReleaseCursorOverride();
+                return;
+            }
+
+            if (!_cursorBorrowed)
+            {
+                _savedCursorLock = Cursor.lockState;
+                _savedCursorVisible = Cursor.visible;
+                _cursorBorrowed = true;
+            }
+
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+        }
+
+        private void ReleaseCursorOverride()
+        {
+            if (!_cursorBorrowed)
+                return;
+
+            _cursorBorrowed = false;
+            // If a menu has since taken control of the cursor, leave it alone.
+            if (InputManager.Instance == null ||
+                InputManager.Instance.CurrentInputState != InputManager.InputState.Dead)
+                return;
+
+            if (Cursor.lockState == CursorLockMode.None)
+            {
+                Cursor.lockState = _savedCursorLock;
+                Cursor.visible = _savedCursorVisible;
+            }
         }
 
         private void RefreshPlayers()
@@ -229,6 +306,8 @@ namespace StonewardsSpectatorSwitch
 
         private void ResetSpectator()
         {
+            ReleaseCursorOverride();
+            _hud?.Hide();
             if (_overriddenCamera != null)
                 RestoreCamera(_overriddenCamera);
             _target = null;
@@ -247,6 +326,10 @@ namespace StonewardsSpectatorSwitch
             ResetSpectator();
         }
 
-        private void OnDestroy() => ResetSpectator();
+        private void OnDestroy()
+        {
+            ResetSpectator();
+            _hud?.Dispose();
+        }
     }
 }
