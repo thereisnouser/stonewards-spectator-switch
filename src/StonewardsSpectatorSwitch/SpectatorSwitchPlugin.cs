@@ -170,12 +170,15 @@ namespace StonewardsSpectatorSwitch
                 return;
 
             _cursorBorrowed = false;
-            // If a menu has since taken control of the cursor, leave it alone.
-            if (InputManager.Instance == null ||
-                InputManager.Instance.CurrentInputState != InputManager.InputState.Dead)
+            // The game owns the cursor in modal menus. Restore our borrowed
+            // settings in gameplay and death mode (including just after revival).
+            var input = InputManager.Instance;
+            if (input == null ||
+                (input.CurrentInputState != InputManager.InputState.Dead &&
+                 input.CurrentInputState != InputManager.InputState.Gameplay))
                 return;
 
-            if (Cursor.lockState == CursorLockMode.None)
+            if (Cursor.lockState == CursorLockMode.None && Cursor.visible)
             {
                 Cursor.lockState = _savedCursorLock;
                 Cursor.visible = _savedCursorVisible;
