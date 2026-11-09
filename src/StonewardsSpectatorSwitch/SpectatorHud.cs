@@ -191,6 +191,13 @@ namespace StonewardsSpectatorSwitch
             button.style.borderRightColor = BorderColor;
             button.style.borderBottomColor = BorderColor;
             button.style.borderLeftColor = BorderColor;
+            // Clear visual feedback that the arrows are clickable.
+            button.RegisterCallback<PointerEnterEvent>(_ =>
+            {
+                if (button.enabledInHierarchy)
+                    button.style.backgroundColor = new Color(0.35f, 0.27f, 0.17f, 0.98f);
+            });
+            button.RegisterCallback<PointerLeaveEvent>(_ => button.style.backgroundColor = ButtonColor);
             return button;
         }
 
