@@ -19,6 +19,8 @@ $required = @(
     (Join-Path $managed 'UnityEngine.dll'),
     (Join-Path $managed 'UnityEngine.CoreModule.dll'),
     (Join-Path $managed 'UnityEngine.PhysicsModule.dll'),
+    (Join-Path $managed 'UnityEngine.UIElementsModule.dll'),
+    (Join-Path $managed 'UnityEngine.TextRenderingModule.dll'),
     (Join-Path $managed 'Unity.InputSystem.dll'),
     (Join-Path $bepCore 'BepInEx.dll')
 )
