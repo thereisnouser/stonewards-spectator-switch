@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 — unreleased
+## 0.1.0
 
 - LMB/RMB cycles through living dwarfs while dead.
 - Shows a game-HUD spectator panel with clickable previous/next buttons, player name, count and shortcut hints.
