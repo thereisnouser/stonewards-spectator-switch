@@ -13,12 +13,12 @@ namespace StonewardsSpectatorSwitch
     {
         public const string PluginGuid = "com.thereisnouser.stonewards.spectatorswitch";
         public const string PluginName = "Stonewards Spectator Switch";
-        public const string PluginVersion = "0.1.0";
+        public const string PluginVersion = "0.1.1";
 
         private readonly List<FirstPersonController> _alivePlayers = new List<FirstPersonController>(4);
         private ConfigEntry<bool> _enabled;
-        private ConfigEntry<float> _distance;
-        private ConfigEntry<float> _height;
+        private ConfigEntry<float> _orbitDistance;
+        private ConfigEntry<float> _eyeHeight;
         private ConfigEntry<bool> _autoAdvance;
 
         private FirstPersonController _target;
@@ -26,7 +26,6 @@ namespace StonewardsSpectatorSwitch
         private Camera _renderCamera;
         private Camera _overriddenCamera;
         private Vector3 _originalPosition;
-        private Quaternion _originalRotation;
         private bool _dead;
         private bool _wasDead;
 
@@ -36,12 +35,14 @@ namespace StonewardsSpectatorSwitch
                 "Allow left/right mouse clicks to cycle through living teammates while dead.");
             _autoAdvance = Config.Bind("General", "AutoAdvanceWhenTargetDies", true,
                 "Automatically select another living teammate if the current spectator target dies or leaves.");
-            _distance = Config.Bind("Camera", "Distance", 3.5f,
-                new ConfigDescription("Third-person camera distance behind the spectated dwarf.",
-                    new AcceptableValueRange<float>(1.5f, 8f)));
-            _height = Config.Bind("Camera", "Height", 1.45f,
-                new ConfigDescription("Camera height above the spectated dwarf.",
-                    new AcceptableValueRange<float>(0.5f, 4f)));
+            // New keys deliberately replace 0.1.0's Distance/Height settings.
+            // Existing config files must start with first-person/free-look defaults.
+            _orbitDistance = Config.Bind("Camera", "OrbitDistance", 0f,
+                new ConfigDescription("Optional pullback along your current view direction (0 = player eye position).",
+                    new AcceptableValueRange<float>(0f, 8f)));
+            _eyeHeight = Config.Bind("Camera", "EyeHeight", 1.55f,
+                new ConfigDescription("Camera eye height relative to the selected player's transform.",
+                    new AcceptableValueRange<float>(0.5f, 3f)));
 
             Logger.LogInfo("Spectator Switch v" + PluginVersion + " initialized (client-side). LMB: next, RMB: previous while dead.");
         }
@@ -168,24 +169,29 @@ namespace StonewardsSpectatorSwitch
                 return;
 
             var t = player.transform;
-            Vector3 focus = t.position + Vector3.up * 1.15f;
-            Vector3 backwards = -(t.forward.sqrMagnitude > 0.001f ? t.forward.normalized : Vector3.forward);
-            Vector3 desired = focus + backwards * _distance.Value + Vector3.up * _height.Value;
+            Vector3 eye = t.position + Vector3.up * _eyeHeight.Value;
+            // Keep the native camera rotation unchanged. Mouse look continues to
+            // belong to the game; only the selected teammate's position changes.
+            // Optional orbit distance uses the viewer's look direction, not
+            // the selected player's forward vector.
+            Vector3 desired = eye - camera.transform.forward * _orbitDistance.Value;
 
-            // Pull camera forward when terrain blocks the view, but ignore the observed dwarf's collider.
-            RaycastHit hit;
-            Vector3 rayOrigin = focus + Vector3.up * 0.45f;
-            if (Physics.Linecast(rayOrigin, desired, out hit, ~0, QueryTriggerInteraction.Ignore) &&
-                hit.collider != null && !hit.collider.transform.IsChildOf(t))
+            // Only perform collision correction when the user deliberately enables
+            // the optional third-person pullback.
+            if (_orbitDistance.Value > 0.05f)
             {
-                Vector3 fromWall = (rayOrigin - desired).normalized;
-                desired = hit.point + fromWall * 0.2f;
+                RaycastHit hit;
+                if (Physics.Linecast(eye, desired, out hit, ~0, QueryTriggerInteraction.Ignore) &&
+                    hit.collider != null && !hit.collider.transform.IsChildOf(t))
+                {
+                    Vector3 awayFromWall = (eye - desired).normalized;
+                    desired = hit.point + awayFromWall * 0.2f;
+                }
             }
 
             _originalPosition = camera.transform.position;
-            _originalRotation = camera.transform.rotation;
             _overriddenCamera = camera;
-            camera.transform.SetPositionAndRotation(desired, Quaternion.LookRotation(focus - desired, Vector3.up));
+            camera.transform.position = desired;
         }
 
         private static Camera FindMainGameCamera()
@@ -217,7 +223,7 @@ namespace StonewardsSpectatorSwitch
         {
             if (camera == null || camera != _overriddenCamera)
                 return;
-            camera.transform.SetPositionAndRotation(_originalPosition, _originalRotation);
+            camera.transform.position = _originalPosition;
             _overriddenCamera = null;
         }
 
