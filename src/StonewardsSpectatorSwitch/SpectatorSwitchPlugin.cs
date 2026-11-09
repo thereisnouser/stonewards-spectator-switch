@@ -122,7 +122,7 @@ namespace StonewardsSpectatorSwitch
 
             // A free cursor belongs to the on-screen buttons. Do not also execute
             // the global LMB shortcut, which would turn a previous-click into next.
-            if (Cursor.visible && Cursor.lockState == CursorLockMode.None)
+            if (Cursor.visible && Cursor.lockState != CursorLockMode.Locked)
                 return;
 
             if (Mouse.current.leftButton.wasPressedThisFrame)
