@@ -66,6 +66,12 @@ $height = ([int]$iconBytes[20] -shl 24) -bor ([int]$iconBytes[21] -shl 16) -bor
 if ($width -ne 256 -or $height -ne 256) {
     throw "Thunderstore requires 256x256 icon.png, got $width x $height."
 }
+# Pin the exact user-selected artwork (256x256 file), not merely its dimensions.
+$expectedIconSha256 = '8B0FCC76A164367B915F614D97DF313DCE10D17F25752A340E7A7196328E7BD6'
+$actualIconSha256 = (Get-FileHash -LiteralPath $iconPath -Algorithm SHA256).Hash
+if ($actualIconSha256 -cne $expectedIconSha256) {
+    throw "Selected icon does not match the approved artwork (SHA256 mismatch)."
+}
 
 # A fresh build is mandatory; never package a stale DLL from an older test.
 $GameDir = (Resolve-Path -LiteralPath $GameDir -ErrorAction Stop).Path
