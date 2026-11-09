@@ -3,6 +3,7 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <LangVersion>latest</LangVersion>
     <AssemblyName>StonewardsSpectatorSwitch</AssemblyName>
+    <Version>0.1.0</Version>
     <RootNamespace>StonewardsSpectatorSwitch</RootNamespace>
     <Nullable>disable</Nullable>
   </PropertyGroup>
